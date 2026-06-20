@@ -1,12 +1,25 @@
-// Cloudflare Pages Function
-// Lives at: /functions/api/photos.js
-// Becomes available at: https://yourdomain.com/api/photos
+// Cloudflare Worker — replaces the old /functions/api/photos.js approach.
+// This is the modern "Workers with static assets" model. The dashboard
+// can now attach environment variables/secrets because this file gives
+// the project an actual running script (main), not just static files.
 //
-// This runs server-side. The Google API key never reaches the browser.
-// Set GOOGLE_API_KEY as an environment variable in the Cloudflare Pages
-// dashboard (Settings → Environment variables) — never write it in this file.
+// Set GOOGLE_API_KEY in: Dashboard → your project → Settings →
+// Variables and Secrets → Add (Type: Secret).
 
-export async function onRequestGet({ request, env }) {
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    if (url.pathname === '/api/photos') {
+      return handlePhotos(request, env);
+    }
+
+    // Everything else falls through to the static files in /public
+    return env.ASSETS.fetch(request);
+  }
+};
+
+async function handlePhotos(request, env) {
   const url      = new URL(request.url);
   const folderId = url.searchParams.get('folderId');
   const count    = url.searchParams.get('count') || '9';
@@ -39,7 +52,6 @@ export async function onRequestGet({ request, env }) {
       return jsonResponse({ error: data.error?.message || 'Drive API error' }, res.status);
     }
 
-    // Cache for 5 minutes — reduces calls to Google, speeds up repeat visits
     return jsonResponse(data, 200, { 'Cache-Control': 'public, max-age=300' });
 
   } catch (err) {
