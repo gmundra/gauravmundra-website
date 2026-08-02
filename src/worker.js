@@ -1,71 +1,132 @@
-// Cloudflare Worker — replaces the old /functions/api/photos.js approach.
-// This is the modern "Workers with static assets" model. The dashboard
-// can now attach environment variables/secrets because this file gives
-// the project an actual running script (main), not just static files.
+// Cloudflare Worker — gauravmundra.com
 //
-// Set GOOGLE_API_KEY in: Dashboard → your project → Settings →
-// Variables and Secrets → Add (Type: Secret).
+// Routes:
+//   GET  /api/sync-articles  → manual trigger for LinkedIn article sync
+//   GET  /*                  → static assets from /public
+//
+// Cron: every Sunday at midnight UTC (0 0 * * 0)
+//   → fetches published LinkedIn posts from Typefully
+//   → updates articles.json in GitHub repo
+//   → Cloudflare auto-redeploys on repo change → site updates
+//
+// Required environment secrets (Cloudflare → Settings → Variables and Secrets):
+//   TYPEFULLY_API_KEY  — Typefully API key (Typefully → Settings → API)
+//   GITHUB_TOKEN       — GitHub personal access token (repo: contents write)
+//   GITHUB_REPO        — e.g. "gauravmundra/gauravmundra-website"  (type: Text)
+
+const TYPEFULLY_SOCIAL_SET_ID = 319960;
+const ARTICLES_PATH           = 'public/articles.json';
+
+// ─── ENTRY POINT ─────────────────────────────────────────────────────────────
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (url.pathname === '/api/photos') {
-      return handlePhotos(request, env);
+    if (url.pathname === '/api/sync-articles') {
+      const result = await syncArticles(env);
+      return new Response(JSON.stringify(result, null, 2), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    // Everything else falls through to the static files in /public
     return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(_event, env) {
+    await syncArticles(env);
   }
 };
 
-async function handlePhotos(request, env) {
-  const url      = new URL(request.url);
-  const folderId = url.searchParams.get('folderId');
-  const count    = url.searchParams.get('count') || '9';
+// ─── TYPEFULLY → GITHUB SYNC ─────────────────────────────────────────────────
 
-  if (!folderId) {
-    return jsonResponse({ error: 'Missing folderId parameter' }, 400);
-  }
+async function syncArticles(env) {
+  if (!env.TYPEFULLY_API_KEY) return { error: 'TYPEFULLY_API_KEY not set' };
+  if (!env.GITHUB_TOKEN)      return { error: 'GITHUB_TOKEN not set' };
+  if (!env.GITHUB_REPO)       return { error: 'GITHUB_REPO not set' };
 
-  if (!env.GOOGLE_API_KEY) {
-    return jsonResponse({ error: 'Server misconfigured: GOOGLE_API_KEY not set' }, 500);
-  }
-
-  const q = encodeURIComponent(
-    `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`
+  // 1. Fetch published drafts from Typefully
+  const tfRes = await fetch(
+    `https://api.typefully.com/v1/drafts/?social_set_id=${TYPEFULLY_SOCIAL_SET_ID}&status=published&order_by=-published_at&limit=50`,
+    { headers: { 'X-API-KEY': env.TYPEFULLY_API_KEY } }
   );
 
-  const driveUrl =
-    `https://www.googleapis.com/drive/v3/files` +
-    `?q=${q}` +
-    `&fields=files(id,name,createdTime)` +
-    `&orderBy=createdTime+desc` +
-    `&pageSize=${count}` +
-    `&key=${env.GOOGLE_API_KEY}`;
+  if (!tfRes.ok) return { error: `Typefully error: ${tfRes.status}` };
 
-  try {
-    const res  = await fetch(driveUrl);
-    const data = await res.json();
+  const drafts = (await tfRes.json()).results || [];
 
-    if (!res.ok) {
-      return jsonResponse({ error: data.error?.message || 'Drive API error' }, res.status);
-    }
+  // 2. Filter to LinkedIn-only posts with a published URL
+  const posts = drafts.filter(d =>
+    d.linkedin_post_enabled &&
+    d.linkedin_published_url &&
+    d.linkedin_post_published_at
+  );
 
-    return jsonResponse(data, 200, { 'Cache-Control': 'public, max-age=300' });
+  if (!posts.length) return { message: 'No LinkedIn posts found', added: 0 };
 
-  } catch (err) {
-    return jsonResponse({ error: 'Failed to reach Google Drive API' }, 502);
+  // 3. Fetch current articles.json from GitHub
+  const ghBase    = `https://api.github.com/repos/${env.GITHUB_REPO}`;
+  const ghHeaders = {
+    Authorization:  `Bearer ${env.GITHUB_TOKEN}`,
+    Accept:         'application/vnd.github+json',
+    'User-Agent':   'gauravmundra-worker'
+  };
+
+  const fileRes = await fetch(`${ghBase}/contents/${ARTICLES_PATH}`, { headers: ghHeaders });
+  let existing = [];
+  let fileSha  = null;
+
+  if (fileRes.ok) {
+    const fd   = await fileRes.json();
+    fileSha    = fd.sha;
+    existing   = JSON.parse(atob(fd.content.replace(/\n/g, ''))).articles || [];
   }
+
+  // 4. Find new posts
+  const existingIds = new Set(existing.map(a => a.id));
+  const added = posts
+    .filter(d => !existingIds.has(d.id))
+    .map(d => ({
+      id:           d.id,
+      title:        cleanTitle(d.draft_title),
+      excerpt:      d.preview || '',
+      url:          d.linkedin_published_url,
+      published_at: d.linkedin_post_published_at
+    }));
+
+  if (!added.length) return { message: 'All posts already synced', added: 0 };
+
+  // 5. Merge, sort, push back to GitHub
+  const merged = [...added, ...existing]
+    .sort((a, b) => new Date(b.published_at) - new Date(a.published_at));
+
+  const body = {
+    message: `Sync ${added.length} new LinkedIn article(s)`,
+    content: btoa(unescape(encodeURIComponent(JSON.stringify({ articles: merged }, null, 2)))),
+    ...(fileSha ? { sha: fileSha } : {})
+  };
+
+  const pushRes = await fetch(`${ghBase}/contents/${ARTICLES_PATH}`, {
+    method:  'PUT',
+    headers: { ...ghHeaders, 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body)
+  });
+
+  if (!pushRes.ok) {
+    const err = await pushRes.json();
+    return { error: `GitHub push failed: ${err.message}` };
+  }
+
+  return { message: 'Sync complete', added: added.length, titles: added.map(a => a.title) };
 }
 
-function jsonResponse(body, status = 200, extraHeaders = {}) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      ...extraHeaders
-    }
-  });
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+// "PM: Full-Stack PM Advice (LinkedIn)" → "Full-Stack PM Advice"
+function cleanTitle(raw) {
+  if (!raw) return 'Untitled';
+  return raw
+    .replace(/\s*\([^)]*\)\s*$/, '')   // strip trailing (LinkedIn), (X thread) etc.
+    .replace(/^[^:]+:\s*/, '')          // strip leading "PM: " category prefix
+    .trim() || raw;
 }
