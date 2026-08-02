@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git check-ignore *)",
+      "Bash(rm -f roast-ritual-shop.zip)",
+      "Bash(zip -rq roast-ritual-shop.zip roast-ritual-shop -x '*.DS_Store')",
+      "Bash(unzip -l roast-ritual-shop.zip)",
+      "Bash(curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh)",
+      "Bash(bash)"
+    ]
+  }
+}
