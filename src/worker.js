@@ -10,7 +10,7 @@
 //   → Cloudflare auto-redeploys on repo change → site updates
 //
 // Required environment secrets (Cloudflare → Settings → Variables and Secrets):
-//   TYPEFULLY_API_KEY  — Typefully API key (Typefully → Settings → API)
+//   TYPEFULLY_API_KEY  — Typefully API v2 key (Typefully → Settings → API)
 //   GITHUB_TOKEN       — GitHub personal access token (repo: contents write)
 //   GITHUB_REPO        — e.g. "gauravmundra/gauravmundra-website"  (type: Text)
 
@@ -46,12 +46,21 @@ async function syncArticles(env) {
   if (!env.GITHUB_REPO)       return { error: 'GITHUB_REPO not set' };
 
   // 1. Fetch published drafts from Typefully
-  const tfRes = await fetch(
-    `https://api.typefully.com/v1/drafts/?social_set_id=${TYPEFULLY_SOCIAL_SET_ID}&status=published&order_by=-published_at&limit=50`,
-    { headers: { 'X-API-KEY': env.TYPEFULLY_API_KEY } }
-  );
+  // Typefully API v2 — v1 was retired 15 June 2026.
+  // Auth is Authorization: Bearer, and drafts are scoped to a social set.
+  const tfUrl =
+    `https://api.typefully.com/v2/social-sets/${TYPEFULLY_SOCIAL_SET_ID}/drafts` +
+    `?status=published&order_by=-published_at&limit=50`;
 
-  if (!tfRes.ok) return { error: `Typefully error: ${tfRes.status}` };
+  const tfRes = await fetch(tfUrl, {
+    headers: { Authorization: `Bearer ${env.TYPEFULLY_API_KEY}` }
+  });
+
+  if (!tfRes.ok) {
+    let detail = '';
+    try { detail = JSON.stringify(await tfRes.json()); } catch (_) {}
+    return { error: `Typefully error: ${tfRes.status}`, detail };
+  }
 
   const drafts = (await tfRes.json()).results || [];
 
