@@ -9,5 +9,14 @@
   },
   "triggers": {
     "crons": ["0 0 * * SUN"]
+  },
+  "routes": [
+    {
+      "pattern": "gauravmundra.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "GITHUB_REPO": "gmundra/gauravmundra-website"
   }
 }
