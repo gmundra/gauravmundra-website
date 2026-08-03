@@ -1,1 +1,32 @@
-{"articles":[]}
+{
+  "articles": [
+    {
+      "id": 10061757,
+      "title": "Same Models, Same Access, EHR-as-AI-Platform",
+      "excerpt": "Your AI is not your product. It probably stopped being your product a while ago.\n\nThree things...",
+      "url": "https://www.linkedin.com/feed/update/urn:li:share:7488118621487996929",
+      "published_at": "2026-07-29T06:30:02.306Z"
+    },
+    {
+      "id": 10061753,
+      "title": "Prior Auth Automation, The Wrong Problem Solved Fast",
+      "excerpt": "Everyone is automating prior authorization. Almost nobody is fixing it.\n\nCMS-0057-F cut standard...",
+      "url": "https://www.linkedin.com/feed/update/urn:li:share:7487393848109912064",
+      "published_at": "2026-07-27T06:30:02.694Z"
+    },
+    {
+      "id": 9911872,
+      "title": "Full-Stack PM Advice",
+      "excerpt": "Everyone's telling product managers to become \"full-stack\" and think like a mini-CEO. In health...",
+      "url": "https://www.linkedin.com/feed/update/urn:li:share:7483245255853568000",
+      "published_at": "2026-07-15T19:45:01.212Z"
+    },
+    {
+      "id": 9869278,
+      "title": "CMS ACCESS Model",
+      "excerpt": "CMS just approved 150+ providers and digital health companies to get paid for outcomes instead of...",
+      "url": "https://www.linkedin.com/feed/update/urn:li:share:7481946233771577344",
+      "published_at": "2026-07-12T05:43:10.257Z"
+    }
+  ]
+}
