@@ -1,6 +1,20 @@
 {
   "articles": [
     {
+      "id": 10859166,
+      "title": "Product Roadmap & Reimbursement - LinkedIn PUBLISH",
+      "excerpt": "Your product roadmap is missing a feature you didn't know was critical: reimbursement.\n\nYou're...",
+      "url": "https://www.linkedin.com/feed/update/urn:li:share:7507763855251398656",
+      "published_at": "2026-09-21T11:33:11.308Z"
+    },
+    {
+      "id": 10859160,
+      "title": "RCM Automation vs Payer Rule Changes - LinkedIn PUBLISH",
+      "excerpt": "You built RCM automation to solve denials. It worked in Q2. By Q4, payer rules shifted and your...",
+      "url": "https://www.linkedin.com/feed/update/urn:li:share:7507763813782392832",
+      "published_at": "2026-09-21T11:33:01.396Z"
+    },
+    {
       "id": 10291597,
       "title": "RCM Automation Paradox",
       "excerpt": "Revenue cycle leaders know the math. Denial rates are climbing. Margins are shrinking. Sixty-one...",
